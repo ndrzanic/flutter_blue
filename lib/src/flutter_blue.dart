@@ -175,6 +175,10 @@ class FlutterBlue {
     _isScanning.add(false);
   }
 
+  Future connectToDevice(String deviceAddress) async {
+    return _channel.invokeMethod('connectToDevice', deviceAddress);
+  }
+
   /// The list of connected peripherals can include those that are connected
   /// by other apps and that will need to be connected locally using the
   /// device.connect() method before they can be used.
