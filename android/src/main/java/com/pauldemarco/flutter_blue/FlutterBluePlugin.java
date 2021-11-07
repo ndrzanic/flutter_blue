@@ -200,7 +200,33 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
             {
                 String deviceAddr = call.arguments.toString();
                 BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(deviceAddr); 
-                result.success(device);
+                boolean isConnected = mBluetoothManager.getConnectedDevices(BluetoothProfile.GATT).contains(device);
+
+                // If device is already connected, return error
+                if(mDevices.containsKey(deviceId) && isConnected) {
+                    result.error("already_connected", "connection with device already exists", null);
+                    return;
+                }
+
+                // If device was connected to previously but is now disconnected, attempt a reconnect
+                if(mDevices.containsKey(deviceId) && !isConnected) {
+                    if(mDevices.get(deviceId).gatt.connect()){
+                        result.success(null);
+                    } else {
+                        result.error("reconnect_error", "error when reconnecting to device", null);
+                    }
+                    return;
+                }
+
+                // New request, connect and add gattServer to Map
+                BluetoothGatt gattServer;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    gattServer = device.connectGatt(context, options.getAndroidAutoConnect(), mGattCallback, BluetoothDevice.TRANSPORT_LE);
+                } else {
+                    gattServer = device.connectGatt(context, options.getAndroidAutoConnect(), mGattCallback);
+                }
+                mDevices.put(deviceId, new BluetoothDeviceCache(gattServer));
+                result.success(null);
                 break;
             }
 
