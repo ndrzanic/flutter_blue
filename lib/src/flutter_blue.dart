@@ -175,8 +175,21 @@ class FlutterBlue {
     _isScanning.add(false);
   }
 
-  Future connectToDevice(String deviceAddress) async {
-    return _channel.invokeMethod('connectToDevice', deviceAddress);
+  Future<List<BluetoothService>> connectToDevice(String deviceAddress) async {
+    var response = FlutterBlue.instance._methodStream
+        .where((m) => m.method == "DiscoverServicesResult")
+        .map((m) => m.arguments)
+        .map((buffer) => new protos.DiscoverServicesResult.fromBuffer(buffer))
+        .where((p) => p.remoteId == deviceAddress.toString())
+        .map((p) => p.services)
+        .map((s) => s.map((p) => new BluetoothService.fromProto(p)).toList())
+        .first
+        .then((list) {
+      return list;
+    });
+    await _channel.invokeMethod('connectToDevice', deviceAddress);
+
+    return response;
   }
 
   /// The list of connected peripherals can include those that are connected
