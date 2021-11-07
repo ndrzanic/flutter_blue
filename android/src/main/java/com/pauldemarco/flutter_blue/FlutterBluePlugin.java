@@ -201,7 +201,6 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
                 String deviceAddr = call.arguments.toString();
                 BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(deviceAddr); 
                 boolean isConnected = mBluetoothManager.getConnectedDevices(BluetoothProfile.GATT).contains(device);
-                Log.i("DEBUG", isConnected.toString());
                 Protos.ConnectRequest options = Protos.ConnectRequest.newBuilder().build();
                 // If device is already connected, return error
                 if(mDevices.containsKey(deviceAddr) && isConnected) {
