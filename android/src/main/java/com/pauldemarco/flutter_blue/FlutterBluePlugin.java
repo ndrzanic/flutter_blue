@@ -16,6 +16,7 @@ import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattServer;
 import android.bluetooth.BluetoothGattService;
+import android.bluetooth.BluetoothSocket;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.le.BluetoothLeScanner;
@@ -71,6 +72,7 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
     private EventChannel stateChannel;
     private BluetoothManager mBluetoothManager;
     private BluetoothAdapter mBluetoothAdapter;
+    private BluetoothSocket mBluetoothSocket; 
 
     private FlutterPluginBinding pluginBinding;
     private ActivityPluginBinding activityBinding;
@@ -200,57 +202,63 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
             {
                 String deviceAddr = call.arguments.toString();
                 BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(deviceAddr);
-                ParcelUuid[] uids = device.getUuids();
-                for(ParcelUuid uid : uids) {
-                    Log.i("DEBUG ", uid.toString());
-                }
-                boolean isConnected = mBluetoothManager.getConnectedDevices(BluetoothProfile.GATT).contains(device);
-                Protos.ConnectRequest options = Protos.ConnectRequest.newBuilder().build();
-                // If device is already connected, return error
-                if(mDevices.containsKey(deviceAddr) && isConnected) {
-                Log.i("DEBUG", "already connected");
-                    result.error("already_connected", "connection with device already exists", null);
-                    return;
-                }
-
-                // If device was connected to previously but is now disconnected, attempt a reconnect
-                if(mDevices.containsKey(deviceAddr) && !isConnected) {
-                Log.i("DEBUG", "was connected, attempting reconnect");
-                    if(mDevices.get(deviceAddr).gatt.connect()){
-                Log.i("DEBUG", "reconnected");
-                        result.success(null);
-                    } else {
-                        result.error("reconnect_error", "error when reconnecting to device", null);
-                    }
-                    return;
-                }
-
-                // New request, connect and add gattServer to Map
-                BluetoothGatt gattServer;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    gattServer = device.connectGatt(context, options.getAndroidAutoConnect(), mGattCallback, BluetoothDevice.TRANSPORT_LE);
-                } else {
-                    gattServer = device.connectGatt(context, options.getAndroidAutoConnect(), mGattCallback);
-                }
-                Log.i("DEBUG", gattServer.toString());
-                mDevices.put(deviceAddr, new BluetoothDeviceCache(gattServer));
-                
 
                 try {
-                    BluetoothGatt gatt = locateGatt(deviceAddr);
-                    Protos.DiscoverServicesResult.Builder p = Protos.DiscoverServicesResult.newBuilder();
-                    p.setRemoteId(deviceAddr);
-                    for(BluetoothGattService s : gatt.getServices()){
-                Log.i("DEBUG", "found service " + s.toString());
-                        p.addServices(ProtoMaker.from(gatt.getDevice(), s, gatt));
-                    }
-                    
-                Log.i("DEBUG", "that's it folks");
-                    result.success(p.build().toByteArray());
-                }   catch(Exception e) {
-                    result.error("get_services_error", e.getMessage(), e);
+
+                    UUID id = UUID.fromString("d2753e53-baa8-4116-b221-6ec19074b138");
+                    mBluetoothSocket = device.createInsecureRfcommSocketToServiceRecord(id);
+                    mBluetoothSocket.connect(); 
+                } catch(Exception e) {
+                    e.printStackTrace(); 
                 }
-                break;
+                
+                // boolean isConnected = mBluetoothManager.getConnectedDevices(BluetoothProfile.GATT).contains(device);
+                // Protos.ConnectRequest options = Protos.ConnectRequest.newBuilder().build();
+                // // If device is already connected, return error
+                // if(mDevices.containsKey(deviceAddr) && isConnected) {
+                // Log.i("DEBUG", "already connected");
+                //     result.error("already_connected", "connection with device already exists", null);
+                //     return;
+                // }
+
+                // // If device was connected to previously but is now disconnected, attempt a reconnect
+                // if(mDevices.containsKey(deviceAddr) && !isConnected) {
+                // Log.i("DEBUG", "was connected, attempting reconnect");
+                //     if(mDevices.get(deviceAddr).gatt.connect()){
+                // Log.i("DEBUG", "reconnected");
+                //         result.success(null);
+                //     } else {
+                //         result.error("reconnect_error", "error when reconnecting to device", null);
+                //     }
+                //     return;
+                // }
+
+                // // New request, connect and add gattServer to Map
+                // BluetoothGatt gattServer;
+                // if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                //     gattServer = device.connectGatt(context, options.getAndroidAutoConnect(), mGattCallback, BluetoothDevice.TRANSPORT_LE);
+                // } else {
+                //     gattServer = device.connectGatt(context, options.getAndroidAutoConnect(), mGattCallback);
+                // }
+                // Log.i("DEBUG", gattServer.toString());
+                // mDevices.put(deviceAddr, new BluetoothDeviceCache(gattServer));
+                
+
+                // try {
+                //     BluetoothGatt gatt = locateGatt(deviceAddr);
+                //     Protos.DiscoverServicesResult.Builder p = Protos.DiscoverServicesResult.newBuilder();
+                //     p.setRemoteId(deviceAddr);
+                //     for(BluetoothGattService s : gatt.getServices()){
+                // Log.i("DEBUG", "found service " + s.toString());
+                //         p.addServices(ProtoMaker.from(gatt.getDevice(), s, gatt));
+                //     }
+                    
+                // Log.i("DEBUG", "that's it folks");
+                //     result.success(p.build().toByteArray());
+                // }   catch(Exception e) {
+                //     result.error("get_services_error", e.getMessage(), e);
+                // }
+                // break;
             }
 
             case "state":
