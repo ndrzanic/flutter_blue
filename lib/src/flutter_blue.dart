@@ -7,6 +7,7 @@ part of flutter_blue;
 class FlutterBlue {
   final MethodChannel _channel = const MethodChannel('$NAMESPACE/methods');
   final EventChannel _stateChannel = const EventChannel('$NAMESPACE/state');
+  final EventChannel _dataChannel = const EventChannel('$NAMESPACE/data');
   final StreamController<MethodCall> _methodStreamController =
       new StreamController.broadcast(); // ignore: close_sinks
   Stream<MethodCall> get _methodStream => _methodStreamController
@@ -62,6 +63,13 @@ class FlutterBlue {
         .receiveBroadcastStream()
         .map((buffer) => new protos.BluetoothState.fromBuffer(buffer))
         .map((s) => BluetoothState.values[s.state.value]);
+  }
+
+  /// Gets the current state of the Bluetooth module
+  Stream get data async* {
+    yield await _channel.invokeMethod('readData');
+
+    yield* _stateChannel.receiveBroadcastStream();
   }
 
   /// Retrieve a list of connected devices
@@ -175,21 +183,8 @@ class FlutterBlue {
     _isScanning.add(false);
   }
 
-  Future<List<BluetoothService>> connectToDevice(String deviceAddress) async {
-    var response = FlutterBlue.instance._methodStream
-        .where((m) => m.method == "DiscoverServicesResult")
-        .map((m) => m.arguments)
-        .map((buffer) => new protos.DiscoverServicesResult.fromBuffer(buffer))
-        .where((p) => p.remoteId == deviceAddress.toString())
-        .map((p) => p.services)
-        .map((s) => s.map((p) => new BluetoothService.fromProto(p)).toList())
-        .first
-        .then((list) {
-      return list;
-    });
+  Future connectToDevice(String deviceAddress) async {
     await _channel.invokeMethod('connectToDevice', deviceAddress);
-
-    return response;
   }
 
   /// The list of connected peripherals can include those that are connected

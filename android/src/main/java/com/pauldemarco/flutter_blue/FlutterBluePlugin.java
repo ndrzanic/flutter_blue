@@ -208,6 +208,7 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
                     UUID id = UUID.fromString("d2753e53-baa8-4116-b221-6ec19074b138");
                     mBluetoothSocket = device.createInsecureRfcommSocketToServiceRecord(id);
                     mBluetoothSocket.connect(); 
+                    result.success(null);
                 } catch(Exception e) {
                     e.printStackTrace(); 
                 }
@@ -261,6 +262,16 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
                 // break;
             }
 
+            case "readData": {
+                try {
+                mBluetoothSocket.getInputStream();
+                result.success(null); 
+
+                } catch(Exception e) {
+                    e.printStackTrace(); 
+                }
+                    
+            }
             case "state":
             {
                 Protos.BluetoothState.Builder p = Protos.BluetoothState.newBuilder();
