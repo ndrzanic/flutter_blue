@@ -31,6 +31,8 @@ import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.ParcelUuid;
+import android.os.Handler;
+import android.os.Message;
 import android.util.Log;
 
 import com.google.protobuf.ByteString;
@@ -41,6 +43,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+
+import java.io.DataInputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.IOException;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -64,15 +71,27 @@ import io.flutter.plugin.common.PluginRegistry.RequestPermissionsResultListener;
 /** FlutterBluePlugin */
 public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCallHandler, RequestPermissionsResultListener  {
     private static final String TAG = "FlutterBluePlugin";
-    private Object initializationLock = new Object();
+    private static final String NAMESPACE = "plugins.pauldemarco.com/flutter_blue";
     private Context context;
     private MethodChannel channel;
-    private static final String NAMESPACE = "plugins.pauldemarco.com/flutter_blue";
+    private Object initializationLock = new Object();
 
     private EventChannel stateChannel;
     private BluetoothManager mBluetoothManager;
     private BluetoothAdapter mBluetoothAdapter;
     private BluetoothSocket mBluetoothSocket; 
+
+    private InputStream input; 
+    private DataInputStream dinput; 
+    public static final int STATE_NONE = 0;       // we're doing nothing
+    public static final int STATE_LISTEN = 1;     // now listening for incoming connections
+    public static final int STATE_CONNECTING = 2; // now initiating an outgoing connection
+    public static final int STATE_CONNECTED = 3; 
+    private ConnectThread mConnectThread;
+    private ConnectedThread mConnectedThread;
+    private int mState = STATE_NONE;
+    private int mNewState = STATE_NONE;
+    
 
     private FlutterPluginBinding pluginBinding;
     private ActivityPluginBinding activityBinding;
@@ -181,6 +200,137 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
         application = null;
     }
 
+    private final Handler mHandler = new Handler() {
+        @Override
+        public void handleMessage(Message msg) {
+            byte[] readBuf = (byte[]) msg.obj;
+            // construct a string from the valid bytes in the buffer
+            String readMessage = new String(readBuf, 0, msg.arg1);
+        }
+    };
+
+    private class ConnectThread extends Thread {
+        private final BluetoothSocket mmSocket;
+        private final BluetoothDevice mmDevice;
+
+        private ConnectedThread mConnectedThread;
+        private String mSocketType;
+
+        public ConnectThread(BluetoothDevice device) {
+            mmDevice = device;
+            BluetoothSocket tmp = null;
+            mSocketType = "Insecure";
+
+            // Get a BluetoothSocket for a connection with the
+            // given BluetoothDevice
+
+            UUID id = UUID.fromString("d2753e53-baa8-4116-b221-6ec19074b138");
+            try {
+                tmp = device.createInsecureRfcommSocketToServiceRecord(id);
+            } catch (IOException e) {
+                Log.e(TAG, "Socket Type: " + mSocketType + "create() failed", e);
+            }
+            mmSocket = tmp;
+            mState = STATE_CONNECTING;
+        }
+
+        public void run() {
+            Log.i(TAG, "BEGIN mConnectThread SocketType:" + mSocketType);
+            setName("ConnectThread" + mSocketType);
+            // Make a connection to the BluetoothSocket
+            try {
+                // This is a blocking call and will only return on a
+                // successful connection or an exception
+                mmSocket.connect();
+                
+            } catch (IOException e) {
+                // Close the socket
+                try {
+                    mmSocket.close();
+                } catch (IOException e2) {
+                    Log.e(TAG, "unable to close() " + mSocketType +
+                            " socket during connection failure", e2);
+                }
+                // connectionFailed();
+                // return;
+            }
+            Log.d("MMSOCKET ", mmSocket.toString());
+            mConnectedThread = new ConnectedThread(mmSocket, mSocketType);
+            mConnectedThread.start();
+
+        }
+
+        public void cancel() {
+            try {
+                mmSocket.close();
+            } catch (IOException e) {
+                Log.e(TAG, "close() of connect " + mSocketType + " socket failed", e);
+            }
+        }
+        
+    }
+
+    /**
+     * This thread runs during a connection with a remote device.
+     * It handles all incoming and outgoing transmissions.
+     */
+    private class ConnectedThread extends Thread {
+        private final BluetoothSocket mmSocket;
+        private final InputStream mmInStream;
+        private final OutputStream mmOutStream;
+
+        public ConnectedThread(BluetoothSocket socket, String socketType) {
+            Log.d(TAG, "create ConnectedThread: " + socketType);
+            mmSocket = socket;
+            Log.d(TAG, mmSocket.toString());
+            Log.d(TAG, socket.toString());
+            InputStream tmpIn = null;
+            OutputStream tmpOut = null;
+
+            // Get the BluetoothSocket input and output streams
+            try {
+                tmpIn = socket.getInputStream();
+                tmpOut = socket.getOutputStream();
+            } catch (IOException e) {
+                Log.e(TAG, "temp sockets not created", e);
+            }
+
+            mmInStream = tmpIn;
+            mmOutStream = tmpOut;
+            mState = STATE_CONNECTED;
+        }
+
+        public void run() {
+            Log.i(TAG, "BEGIN mConnectedThread");
+            byte[] buffer = new byte[1024];
+            int bytes;
+
+            // Keep listening to the InputStream while connected
+            while (mState == STATE_CONNECTED) {
+                try {
+                    // Read from the InputStream
+                    bytes = mmInStream.read(buffer);
+
+                    // Send the obtained bytes to the UI Activity
+                    Message msg = mHandler.obtainMessage(1, bytes, -1, buffer);
+                    invokeDataStream("ObjectResult", msg);
+                } catch (IOException e) {
+                    Log.e(TAG, "disconnected", e);
+                    // connectionLost();
+                    break;
+                }
+            }
+        }
+
+        public void cancel() {
+            try {
+                mmSocket.close();
+            } catch (IOException e) {
+                Log.e(TAG, "close() of connect socket failed", e);
+            }
+        }
+    }
+
 
     @Override
     public void onMethodCall(MethodCall call, Result result) {
@@ -203,70 +353,51 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
                 String deviceAddr = call.arguments.toString();
                 BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(deviceAddr);
 
-                try {
+                Log.d(TAG, "connect to: " + deviceAddr);
 
-                    UUID id = UUID.fromString("d2753e53-baa8-4116-b221-6ec19074b138");
-                    mBluetoothSocket = device.createInsecureRfcommSocketToServiceRecord(id);
-                    mBluetoothSocket.connect(); 
-                    result.success(null);
-                } catch(Exception e) {
-                    e.printStackTrace(); 
+                // Cancel any thread attempting to make a connection
+                if (mState == STATE_CONNECTING) {
+                    if (mConnectThread != null) {
+                        mConnectThread.cancel();
+                        mConnectThread = null;
+                    }
                 }
-                
-                // boolean isConnected = mBluetoothManager.getConnectedDevices(BluetoothProfile.GATT).contains(device);
-                // Protos.ConnectRequest options = Protos.ConnectRequest.newBuilder().build();
-                // // If device is already connected, return error
-                // if(mDevices.containsKey(deviceAddr) && isConnected) {
-                // Log.i("DEBUG", "already connected");
-                //     result.error("already_connected", "connection with device already exists", null);
-                //     return;
-                // }
 
-                // // If device was connected to previously but is now disconnected, attempt a reconnect
-                // if(mDevices.containsKey(deviceAddr) && !isConnected) {
-                // Log.i("DEBUG", "was connected, attempting reconnect");
-                //     if(mDevices.get(deviceAddr).gatt.connect()){
-                // Log.i("DEBUG", "reconnected");
-                //         result.success(null);
-                //     } else {
-                //         result.error("reconnect_error", "error when reconnecting to device", null);
-                //     }
-                //     return;
-                // }
+                // Cancel any thread currently running a connection
+                if (mConnectedThread != null) {
+                    mConnectedThread.cancel();
+                    mConnectedThread = null;
+                }
 
-                // // New request, connect and add gattServer to Map
-                // BluetoothGatt gattServer;
-                // if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                //     gattServer = device.connectGatt(context, options.getAndroidAutoConnect(), mGattCallback, BluetoothDevice.TRANSPORT_LE);
-                // } else {
-                //     gattServer = device.connectGatt(context, options.getAndroidAutoConnect(), mGattCallback);
-                // }
-                // Log.i("DEBUG", gattServer.toString());
-                // mDevices.put(deviceAddr, new BluetoothDeviceCache(gattServer));
-                
-
+                // Start the thread to connect with the given device
+                mConnectThread = new ConnectThread(device);
+                mConnectThread.start();
                 // try {
-                //     BluetoothGatt gatt = locateGatt(deviceAddr);
-                //     Protos.DiscoverServicesResult.Builder p = Protos.DiscoverServicesResult.newBuilder();
-                //     p.setRemoteId(deviceAddr);
-                //     for(BluetoothGattService s : gatt.getServices()){
-                // Log.i("DEBUG", "found service " + s.toString());
-                //         p.addServices(ProtoMaker.from(gatt.getDevice(), s, gatt));
-                //     }
                     
-                // Log.i("DEBUG", "that's it folks");
-                //     result.success(p.build().toByteArray());
-                // }   catch(Exception e) {
-                //     result.error("get_services_error", e.getMessage(), e);
+                //     UUID id = UUID.fromString("d2753e53-baa8-4116-b221-6ec19074b138");
+                //     if(mBluetoothSocket == null || !mBluetoothSocket.isConnected()) {
+
+                //         mBluetoothSocket = device.createInsecureRfcommSocketToServiceRecord(id);
+                //         mBluetoothSocket.connect(); 
+                //     }
+                //     mState = STATE_CONNECTED;
+                //     result.success(null);
+                // } catch(Exception e) {
+                //     e.printStackTrace(); 
                 // }
-                // break;
+            
             }
 
             case "readData": {
                 try {
-                mBluetoothSocket.getInputStream();
-                result.success(null); 
-
+                
+                byte[] buffer = new byte[256];  
+                int bytes; 
+                input = mBluetoothSocket.getInputStream();
+                dinput = new DataInputStream(input); 
+                bytes = dinput.read(buffer);
+                String readMessage = new String(buffer, 0, bytes);
+                result.success(readMessage); 
                 } catch(Exception e) {
                     e.printStackTrace(); 
                 }
@@ -1076,6 +1207,18 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
                     @Override
                     public void run() {
                         channel.invokeMethod(name, byteArray);
+                    }
+                });
+    }
+
+        private void invokeDataStream(final String name, final Message msg)
+    {
+        Log.d("INVOKING", msg.obj.toString()); 
+        activity.runOnUiThread(
+                new Runnable() {
+                    @Override
+                    public void run() {
+                        channel.invokeMethod(name, msg.obj);
                     }
                 });
     }

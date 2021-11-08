@@ -41,6 +41,8 @@ class FlutterBlue {
 
   BehaviorSubject<List<ScanResult>> _scanResults = BehaviorSubject.seeded([]);
 
+  BehaviorSubject<List<dynamic>> _objectData = BehaviorSubject.seeded([]);
+
   /// Returns a stream that is a list of [ScanResult] results while a scan is in progress.
   ///
   /// The list emitted is all the scanned results as of the last initiated scan. When a scan is
@@ -49,6 +51,8 @@ class FlutterBlue {
   /// One use for [scanResults] is as the stream in a StreamBuilder to display the
   /// results of a scan in real time while the scan is in progress.
   Stream<List<ScanResult>> get scanResults => _scanResults.stream;
+
+  Stream<List<dynamic>> get objectData => _objectData.stream;
 
   PublishSubject _stopScanPill = new PublishSubject();
 
@@ -183,8 +187,17 @@ class FlutterBlue {
     _isScanning.add(false);
   }
 
-  Future connectToDevice(String deviceAddress) async {
+  Stream<dynamic> connectToDevice(String deviceAddress) async* {
     await _channel.invokeMethod('connectToDevice', deviceAddress);
+
+    yield* FlutterBlue.instance._methodStream
+        .where((m) => m.method == "ObjectResult")
+        .map((m) => m.arguments)
+        .map((p) {
+          print(p);
+        // _scanResults.add(list);
+        return p;
+    });
   }
 
   /// The list of connected peripherals can include those that are connected
