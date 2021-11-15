@@ -69,13 +69,6 @@ class FlutterBlue {
         .map((s) => BluetoothState.values[s.state.value]);
   }
 
-  /// Gets the current state of the Bluetooth module
-  Stream get data async* {
-    yield await _channel.invokeMethod('readData');
-
-    yield* _stateChannel.receiveBroadcastStream();
-  }
-
   /// Retrieve a list of connected devices
   Future<List<BluetoothDevice>> get connectedDevices {
     return _channel
@@ -193,11 +186,12 @@ class FlutterBlue {
     yield* FlutterBlue.instance._methodStream
         .where((m) => m.method == "ObjectResult")
         .map((m) => m.arguments)
-        .map((p) {
-          print(p);
+        .map(
+      (p) {
         // _scanResults.add(list);
         return p;
-    });
+      },
+    );
   }
 
   /// The list of connected peripherals can include those that are connected
