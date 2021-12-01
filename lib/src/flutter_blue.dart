@@ -180,8 +180,14 @@ class FlutterBlue {
     _isScanning.add(false);
   }
 
-  Stream<dynamic> connectToDevice(String deviceAddress) async* {
-    await _channel.invokeMethod('connectToDevice', deviceAddress);
+  Stream<dynamic> connectToDevice(String deviceAddress, String uuid) async* {
+    await _channel.invokeMethod(
+      'connectToDevice',
+      <String, String>{
+        "deviceAddress": deviceAddress,
+        "uuid": uuid,
+      },
+    );
 
     yield* FlutterBlue.instance._methodStream
         .where((m) => m.method == "ObjectResult")

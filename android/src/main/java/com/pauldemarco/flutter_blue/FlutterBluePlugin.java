@@ -222,7 +222,7 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
         private ConnectedThread mConnectedThread;
         private String mSocketType;
 
-        public ConnectThread(BluetoothDevice device) {
+        public ConnectThread(BluetoothDevice device, String uuid) {
             mmDevice = device;
             BluetoothSocket tmp = null;
             mSocketType = "Insecure";
@@ -230,7 +230,7 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
             // Get a BluetoothSocket for a connection with the
             // given BluetoothDevice
 
-            UUID id = UUID.fromString("d2753e53-baa8-4116-b221-6ec19074b138");
+            UUID id = UUID.fromString(uuid);
             try {
                 tmp = device.createInsecureRfcommSocketToServiceRecord(id);
             } catch (IOException e) {
@@ -359,7 +359,8 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
 
             case "connectToDevice":
             {
-                String deviceAddr = call.arguments.toString();
+                String deviceAddr = call.argument("deviceAddress");
+                String uuid = call.argument("uuid");
                 BluetoothDevice device = mBluetoothAdapter.getRemoteDevice(deviceAddr);
 
                 Log.d(TAG, "connect to: " + deviceAddr);
@@ -373,7 +374,7 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
                 }
 
                 // Start the thread to connect with the given device
-                mConnectThread = new ConnectThread(device);
+                mConnectThread = new ConnectThread(device, uuid);
                 mConnectThread.start();
             
             }
