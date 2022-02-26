@@ -180,6 +180,10 @@ class FlutterBlue {
     _isScanning.add(false);
   }
 
+  Future disconnect() async {
+    await FlutterBlue.instance.disconnect();
+  }
+
   Stream<dynamic> connectToDevice(String deviceAddress, String uuid) async* {
     await _channel.invokeMethod(
       'connectToDevice',
