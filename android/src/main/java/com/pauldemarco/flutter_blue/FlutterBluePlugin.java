@@ -246,13 +246,11 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
             Log.i(TAG, "BEGIN mConnectThread SocketType:" + mSocketType);
             setName("ConnectThread" + mSocketType);
 
-            Log.i("MMSOCKETHHHHHHH", mmSocket.toString());
             // Make a connection to the BluetoothSocket
             try {
                 // This is a blocking call and will only return on a
                 // successful connection or an exception
                 mmSocket.connect();
-                Log.d("MMSOCKET ", mmSocket.toString());
                 mConnectedThread = new ConnectedThread(mmSocket, mSocketType);
                 mConnectedThread.start();
                 
