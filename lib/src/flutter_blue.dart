@@ -189,7 +189,7 @@ class FlutterBlue {
       },
     );
 
-    print(FlutterBlue.instance._methodStream);
+    print("METHOD STREAM: ${FlutterBlue.instance._methodStream}");
 
     yield* FlutterBlue.instance._methodStream
         .where((m) => m.method == "ObjectResult")
