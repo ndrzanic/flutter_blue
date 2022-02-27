@@ -192,9 +192,6 @@ class FlutterBlue {
         "uuid": uuid,
       },
     );
-
-    print("METHOD STREAM: ${FlutterBlue.instance._methodStream}");
-
     yield* FlutterBlue.instance._methodStream
         .where((m) => m.method == "ObjectResult")
         .map((m) => m.arguments)

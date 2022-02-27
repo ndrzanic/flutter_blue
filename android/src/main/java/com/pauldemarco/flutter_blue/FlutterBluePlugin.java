@@ -374,6 +374,8 @@ public class FlutterBluePlugin implements FlutterPlugin, ActivityAware, MethodCa
                 // Start the thread to connect with the given device
                 mConnectThread = new ConnectThread(device, uuid);
                 mConnectThread.start();
+                result.success(null); 
+                break;
             
             }
 
